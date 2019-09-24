@@ -244,12 +244,12 @@ class SSIM(nn.Module):
         sigma_y  = self.sig_y_pool(y ** 2) - mu_y ** 2
         sigma_xy = self.sig_xy_pool(x * y) - mu_x * mu_y
 
-        # SSIM_n = (2 * mu_x * mu_y + self.C1) * (2 * sigma_xy + self.C2)
-        # SSIM_d = (mu_x ** 2 + mu_y ** 2 + self.C1) * (sigma_x + sigma_y + self.C2)
+        SSIM_n = (2 * mu_x * mu_y + self.C1) * (2 * sigma_xy + self.C2)
+        SSIM_d = (mu_x ** 2 + mu_y ** 2 + self.C1) * (sigma_x + sigma_y + self.C2)
         # SSIM_out = SSIM_n / SSIM_d
         
         # Compute luminance, contrast, and structure components
-        SSIM_l = (2 * mu_x * mu_y + self.C1) / (mu_x**2 + mu_y**2 + self.C1)
+        # SSIM_l = (2 * mu_x * mu_y + self.C1) / (mu_x**2 + mu_y**2 + self.C1)
         # SSIM_c = (2 * sigma_x * sigma_y + self.C2) / (sigma_x**2 + sigma_y**2 + self.C2)
         # SSIM_s = (sigma_xy + self.C3) / (sigma_x * sigma_y + self.C3)
 
@@ -260,8 +260,8 @@ class SSIM(nn.Module):
                 # (2 * sigma_x * sigma_y + self.C2) / (sigma_x**2 + sigma_y**2 + self.C2)**self.b * \
                 # (sigma_xy + self.C3) / (sigma_x * sigma_y + self.C3)**self.c
 
-        # return torch.clamp((1 - SSIM_n / SSIM_d) / 2, 0, 1)
-        return torch.clamp((1 - SSIM_l) / 2, 0, 1)
+        return torch.clamp((1 - SSIM_n / SSIM_d) / 2, 0, 1)
+        # return torch.clamp((1 - SSIM_l) / 2, 0, 1)
 
 
 def compute_depth_errors(gt, pred):
