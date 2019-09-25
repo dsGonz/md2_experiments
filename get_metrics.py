@@ -42,21 +42,18 @@ from utils import download_model_if_doesnt_exist, readlines, normalize_image
 # Config
 MIN_DEPTH = 0.5
 MAX_DEPTH = 8.0
-dset_type = 'turtle/office'
-split = 'to_clean'
-model_name = 'oa_clean_2'
+dpath_root = '/mnt/data0-nfs/shared-datasets/'
+dset_type = 'kitti_data'
+split = 'eigen_zhou'
+model_name = 'scale_0'
 epoch_num = 19
-num_scales = 4
+num_scales = 1
 visualize = True
-write_depths = True
+write_depths = False
 
 # Set up network and load weights
-if model_name.startswith('office_trim'):
-    models_path = abspath('./logs/office')
-else:
-    models_path = abspath('./logs')
+models_path = abspath('./logs')
 weights_path = join(models_path, model_name, 'models', 'weights_{}'.format(epoch_num))
-
 
 
 # Load pretrained model
@@ -82,13 +79,9 @@ encoder.eval()
 depth_decoder.eval()
 
 
-
 # Load validation data
 print('Loading data...')
-if split.startswith('office_trim'):
-    data_path = '/cto-home/dg5463/depth/data/office/'
-else:
-    data_path = '/cto-home/dg5463/depth/data/{}'.format(dset_type)
+data_path = join(dpath_root, dset_type)
 filenames = readlines(join('splits', split, 'val_files.txt'))
 dataset = datasets.OfficeRAWDataset(data_path, filenames, loaded_dict_enc['height'], loaded_dict_enc['width'], [0], num_scales, is_train=False, img_ext='.png')
 dataloader = DataLoader(dataset, 1, shuffle=False, num_workers=1, pin_memory=True, drop_last=False)
