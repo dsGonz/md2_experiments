@@ -11,6 +11,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.autograd import Variable
+from math import exp
 
 
 def disp_to_depth(disp, min_depth, max_depth):
@@ -263,56 +265,126 @@ class SSIM(nn.Module):
         return torch.clamp((1 - SSIM_n / SSIM_d) / 2, 0, 1)
         # return torch.clamp((1 - SSIM_l) / 2, 0, 1)
 
+# MS-SSIM GitHub code from lizhengwei1992/MS_SSIM_pytorch
+def gaussian(window_size, sigma):
+    gauss = torch.Tensor([exp(-(x - window_size//2)**2/float(2*sigma**2)) for x in range(window_size)])
+    return gauss/gauss.sum()
 
+def create_window(window_size, sigma, channel):
+    _1D_window = gaussian(window_size, sigma).unsqueeze(1)
+    _2D_window = _1D_window.mm(_1D_window.t()).float().unsqueeze(0).unsqueeze(0)
+    window = Variable(_2D_window.expand(channel, 1, window_size, window_size).contiguous())
+    return window
 
 class MS_SSIM(nn.Module):
-    def __init__(self): 
+    def __init__(self, size_average = True, max_val = 1):
         super(MS_SSIM, self).__init__()
-        filter_widths = [3, 7, 13, 25, 49]
-        self.num_scales = len(filter_widths)
+        self.size_average = size_average
+        self.channel = 3
+        self.max_val = max_val
+    def _ssim(self, img1, img2, size_average = True):
 
-        self.mu_x_pool = []
-        self.mu_y_pool = []
-        self.sig_x_pool = []
-        self.sig_y_pool = []
-        self.sig_xy_pool = []
-        for fw in filter_widths:
-            self.mu_x_pool.append(nn.AvgPool2d(fw, 1))
-            self.mu_y_pool.append(nn.AvgPool2d(fw, 1))
-            self.sig_x_pool.append(nn.AvgPool2d(fw, 1))
-            self.sig_y_pool.append(nn.AvgPool2d(fw, 1))
-            self.mu_xy_pool.append(nn.AvgPool2d(fw, 1))
+        _, c, w, h = img1.size()
+        window_size = min(w, h, 11)
+        sigma = 1.5 * window_size / 11
+        window = create_window(window_size, sigma, self.channel).cuda()
+        mu1 = F.conv2d(img1, window, padding = window_size//2, groups = self.channel)
+        mu2 = F.conv2d(img2, window, padding = window_size//2, groups = self.channel)
 
-        self.refl = nn.ReflectionPad2d(1)
+        mu1_sq = mu1.pow(2)
+        mu2_sq = mu2.pow(2)
+        mu1_mu2 = mu1*mu2
 
-        self.C1 = 0.01 ** 2
-        self.C2 = 0.03 ** 2
+        sigma1_sq = F.conv2d(img1*img1, window, padding = window_size//2, groups = self.channel) - mu1_sq
+        sigma2_sq = F.conv2d(img2*img2, window, padding = window_size//2, groups = self.channel) - mu2_sq
+        sigma12 = F.conv2d(img1*img2, window, padding = window_size//2, groups = self.channel) - mu1_mu2
 
-        self.a = 0
-        self.b = 1
+        C1 = (0.01*self.max_val)**2
+        C2 = (0.03*self.max_val)**2
+        V1 = 2.0 * sigma12 + C2
+        V2 = sigma1_sq + sigma2_sq + C2
+        ssim_map = ((2*mu1_mu2 + C1)*V1)/((mu1_sq + mu2_sq + C1)*V2)
+        mcs_map = V1 / V2
+        if size_average:
+            return ssim_map.mean(), mcs_map.mean()
 
-    def forward(self, x, y):
-        x = self.refl(x)
-        y = self.refl(y)
+    def ms_ssim(self, img1, img2, levels=5):
 
-        MS_SSIM_out = 1
-        for i in range(self.num_scales):
-            mu_x = self.mu_x_pool[i](x)
-            mu_y = self.mu_y_pool[i](y)
+        # weight = Variable(torch.Tensor([0.0448, 0.2856, 0.3001, 0.2363, 0.1333]).cuda())
+        weight = Variable(torch.Tensor([1, 1, 1, 1, 1]).cuda())
 
-            sigma_x  = self.sig_x_pool[i](x ** 2) - mu_x ** 2
-            sigma_y  = self.sig_y_pool[i](y ** 2) - mu_y ** 2
-            sigma_xy = self.sig_xy_pool[i](x * y) - mu_x * mu_y
+        msssim = Variable(torch.Tensor(levels,).cuda())
+        mcs = Variable(torch.Tensor(levels,).cuda())
+        for i in range(levels):
+            ssim_map, mcs_map = self._ssim(img1, img2)
+            msssim[i] = ssim_map
+            mcs[i] = mcs_map
+            filtered_im1 = F.avg_pool2d(img1, kernel_size=2, stride=2)
+            filtered_im2 = F.avg_pool2d(img2, kernel_size=2, stride=2)
+            img1 = filtered_im1
+            img2 = filtered_im2
 
-            cs_i = (2*sigma_xy + self.C2) / (sigma_x**2 + sigma_y**2 + self.C2)
+        value = (torch.prod(mcs[0:levels-1]**weight[0:levels-1])*
+                                    (msssim[levels-1]**weight[levels-1]))
+        return value
 
-            if i == self.num_scales - 1:
-                lum = (2*mu_x*mu_y + self.C1) / (mu_x**2 + mu_y**2 +self.C1)
-                MS_SSIM_out *= lum*cs_i
-            else:
-                MS_SSIM_out *= cs_i
+
+    def forward(self, img1, img2):
+
+        return torch.clamp((1 - self.ms_ssim(img1, img2)), 0, 1)
+
+
+# class MS_SSIM(nn.Module):
+#     def __init__(self): 
+#         super(MS_SSIM, self).__init__()
+#         filter_widths = [3, 7, 13, 25, 49]
+#         filter_pads = [0, 2, 5, 11, 23]
+#         self.num_scales = len(filter_widths)
+
+#         self.mu_x_pool = []
+#         self.mu_y_pool = []
+#         self.sig_x_pool = []
+#         self.sig_y_pool = []
+#         self.sig_xy_pool = []
+#         for i in range(self.num_scales):
+#             fw = filter_widths[i]
+#             fp = filter_pads[i]
+#             self.mu_x_pool.append(nn.AvgPool2d(fw, 1, fp))
+#             self.mu_y_pool.append(nn.AvgPool2d(fw, 1, fp))
+#             self.sig_x_pool.append(nn.AvgPool2d(fw, 1, fp))
+#             self.sig_y_pool.append(nn.AvgPool2d(fw, 1, fp))
+#             self.sig_xy_pool.append(nn.AvgPool2d(fw, 1, fp))
+
+#         self.refl = nn.ReflectionPad2d(1)
+
+#         self.C1 = 0.01 ** 2
+#         self.C2 = 0.03 ** 2
+
+#         self.a = 0
+#         self.b = 1
+
+#     def forward(self, x, y):
+#         x = self.refl(x)
+#         y = self.refl(y)
+
+#         MS_SSIM_out = 1
+#         for i in range(self.num_scales):
+#             mu_x = self.mu_x_pool[i](x)
+#             mu_y = self.mu_y_pool[i](y)
+
+#             sigma_x  = self.sig_x_pool[i](x ** 2) - mu_x ** 2
+#             sigma_y  = self.sig_y_pool[i](y ** 2) - mu_y ** 2
+#             sigma_xy = self.sig_xy_pool[i](x * y) - mu_x * mu_y
+
+#             cs_i = (2*sigma_xy + self.C2) / (sigma_x**2 + sigma_y**2 + self.C2)
+
+#             if i == self.num_scales - 1:
+#                 lum = (2*mu_x*mu_y + self.C1) / (mu_x**2 + mu_y**2 +self.C1)
+#                 MS_SSIM_out *= lum*cs_i
+#             else:
+#                 MS_SSIM_out *= cs_i
         
-        return torch.clamp((1 - MS_SSIM_out) / 2, 0, 1)
+#        return torch.clamp((1 - MS_SSIM_out), 0, 1)
 
 def compute_depth_errors(gt, pred):
     """Computation of error metrics between predicted and ground truth depths
