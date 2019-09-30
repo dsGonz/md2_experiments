@@ -264,6 +264,56 @@ class SSIM(nn.Module):
         # return torch.clamp((1 - SSIM_l) / 2, 0, 1)
 
 
+
+class MS_SSIM(nn.Module):
+    def __init__(self): 
+        super(MS_SSIM, self).__init__()
+        filter_widths = [3, 7, 13, 25, 49]
+        self.num_scales = len(filter_widths)
+
+        self.mu_x_pool = []
+        self.mu_y_pool = []
+        self.sig_x_pool = []
+        self.sig_y_pool = []
+        self.sig_xy_pool = []
+        for fw in filter_widths:
+            self.mu_x_pool.append(nn.AvgPool2d(fw, 1))
+            self.mu_y_pool.append(nn.AvgPool2d(fw, 1))
+            self.sig_x_pool.append(nn.AvgPool2d(fw, 1))
+            self.sig_y_pool.append(nn.AvgPool2d(fw, 1))
+            self.mu_xy_pool.append(nn.AvgPool2d(fw, 1))
+
+        self.refl = nn.ReflectionPad2d(1)
+
+        self.C1 = 0.01 ** 2
+        self.C2 = 0.03 ** 2
+
+        self.a = 0
+        self.b = 1
+
+    def forward(self, x, y):
+        x = self.refl(x)
+        y = self.refl(y)
+
+        MS_SSIM_out = 1
+        for i in range(self.num_scales):
+            mu_x = self.mu_x_pool[i](x)
+            mu_y = self.mu_y_pool[i](y)
+
+            sigma_x  = self.sig_x_pool[i](x ** 2) - mu_x ** 2
+            sigma_y  = self.sig_y_pool[i](y ** 2) - mu_y ** 2
+            sigma_xy = self.sig_xy_pool[i](x * y) - mu_x * mu_y
+
+            cs_i = (2*sigma_xy + self.C2) / (sigma_x**2 + sigma_y**2 + self.C2)
+
+            if i == self.num_scales - 1:
+                lum = (2*mu_x*mu_y + self.C1) / (mu_x**2 + mu_y**2 +self.C1)
+                MS_SSIM_out *= lum*cs_i
+            else:
+                MS_SSIM_out *= cs_i
+        
+        return torch.clamp((1 - MS_SSIM_out) / 2, 0, 1)
+
 def compute_depth_errors(gt, pred):
     """Computation of error metrics between predicted and ground truth depths
     """
