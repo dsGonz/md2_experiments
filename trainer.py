@@ -147,7 +147,10 @@ class Trainer:
         for mode in ["train", "val"]:
             self.writers[mode] = SummaryWriter(os.path.join(self.log_path, mode))
 
-        if not self.opt.no_ssim:
+        if self.opt.ms_ssim:
+            self.ms_ssim = MS_SSIM()
+            self.ms_ssim.to(self.device)
+        elif not self.opt.no_ssim:
             self.ssim = SSIM()
             self.ssim.to(self.device)
 
@@ -419,6 +422,9 @@ class Trainer:
 
         if self.opt.no_ssim:
             reprojection_loss = l1_loss
+        elif self.ms_ssim:
+            ms_ssim_loss = self.ms_ssim(pred, target)#.mean(1, True)
+            reprojection_loss = 0.85 * ms_ssim_loss + 0.15 * l1_loss
         else:
             ssim_loss = self.ssim(pred, target).mean(1, True)
             reprojection_loss = 0.85 * ssim_loss + 0.15 * l1_loss
