@@ -23,6 +23,8 @@ import os
 import cv2
 import numpy as np
 import PIL.Image as pil
+import matplotlib
+matplotlib.use("agg")
 import matplotlib.pyplot as plt
 import time
 import datasets
@@ -45,9 +47,9 @@ MAX_DEPTH = 8.0
 dpath_root = '/mnt/data0-nfs/shared-datasets/'
 dset_type = 'kitti_data'
 split = 'eigen_zhou'
-model_name = 'scale_0'
+model_name = 'ssim_3'
 epoch_num = 19
-num_scales = 1
+num_scales = 4
 visualize = True
 write_depths = False
 
@@ -83,7 +85,7 @@ depth_decoder.eval()
 print('Loading data...')
 data_path = join(dpath_root, dset_type)
 filenames = readlines(join('splits', split, 'val_files.txt'))
-dataset = datasets.OfficeRAWDataset(data_path, filenames, loaded_dict_enc['height'], loaded_dict_enc['width'], [0], num_scales, is_train=False, img_ext='.png')
+dataset = datasets.KITTIRAWDataset(data_path, filenames, loaded_dict_enc['height'], loaded_dict_enc['width'], [0], num_scales, is_train=False, img_ext='.png')
 dataloader = DataLoader(dataset, 1, shuffle=False, num_workers=1, pin_memory=True, drop_last=False)
 print('Loaded {} validation images from SPLIT: {}  DATASET: {}'.format(len(dataloader), split, dset_type))
 
@@ -111,7 +113,7 @@ with torch.no_grad():
     fid = 0
     for data in dataloader:
         # Get GT depth
-        gt_depth = np.squeeze(data["depth_gt"].data.numpy())/1000
+        gt_depth = np.squeeze(data["depth_gt"].data.numpy())
         gt_h, gt_w = gt_depth.shape
 
         # Get disparity map predictions
