@@ -285,8 +285,10 @@ class MS_SSIM(nn.Module):
     def _ssim(self, img1, img2, size_average = True):
 
         _, c, w, h = img1.size()
-        window_size = min(w, h, 11)
-        sigma = 1.5 * window_size / 11
+        # window_size = min(w, h, 11)
+        # sigma = 1.5 * window_size / 11
+        window_size = min(w,h,3)
+        sigma = 0.5 * window_size / 3
         window = create_window(window_size, sigma, self.channel).cuda()
         mu1 = F.conv2d(img1, window, padding = window_size//2, groups = self.channel)
         mu2 = F.conv2d(img2, window, padding = window_size//2, groups = self.channel)
@@ -331,7 +333,7 @@ class MS_SSIM(nn.Module):
 
     def forward(self, img1, img2):
 
-        return torch.clamp((1 - self.ms_ssim(img1, img2)), 0, 1)
+        return torch.clamp((1 - self.ms_ssim(img1, img2))/2, 0, 1)
 
 
 # class MS_SSIM(nn.Module):
