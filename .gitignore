@@ -7,3 +7,4 @@ kitti_data
 models
 splits/zebra_splits
 logs
+outputs
