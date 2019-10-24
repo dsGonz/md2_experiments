@@ -79,12 +79,19 @@ def scale_matrix(x_scale, y_scale, center=None):
 
     return S
 
-def resize_crop(img, center, h, w, x_scale, y_scale):
+def resize_crop(img, center, x_scale, y_scale):
+    
+    if x_scale == 1 and y_scale == 1:
+        return img
+
+    w, h = img.size
     hs = int(h/y_scale)
     ws = int(w/x_scale)
-    i = int((h - hs)/2)
-    j = int((w - ws)/2)
-    resized_img = F.resized_crop(img, i, j, hs, ws, center)
+    # i = int((h - hs)/2)
+    # j = int((w - ws)/2)
+    i = int(center[1] - hs/2)
+    j = int(center[0] - ws/2)
+    resized_img = F.resized_crop(img, i, j, hs, ws, (h,w))
 
     return resized_img
 
@@ -174,8 +181,8 @@ class MonoDataset(data.Dataset):
             if "color" in k:
                 n, im, i = k
                 inputs[(n, im, i)] = self.to_tensor(f)
-                center_x = self.K[0,2]*(self.width // (2 ** i))
-                center_y = self.K[1,2]*(self.height // (2 ** i))
+                center_x = int(self.K[0,2]*(self.width // (2 ** i)))
+                center_y = int(self.K[1,2]*(self.height // (2 ** i)))
                 center = (center_x, center_y)
                 inputs[(n + "_aug", im, i)] = self.to_tensor(color_aug(resize(rot(f,center), center)))
 
@@ -210,9 +217,10 @@ class MonoDataset(data.Dataset):
 
         do_color_aug = self.is_train and random.random() > 0.5
         do_flip = self.is_train and random.random() > 0.5
-        do_rot = self.is_train and random.random() > 0.5
-        # do_resize = self.is_train and random.random() > 0.5
-        do_resize = False
+        # do_rot = self.is_train and random.random() > 0.5
+        do_resize = self.is_train and random.random() > 0.5
+        do_rot = False
+        # do_resize = False
 
         line = self.filenames[index].split()
         folder = line[0]
@@ -244,7 +252,7 @@ class MonoDataset(data.Dataset):
         if do_resize:
             x_scale = random.uniform(self.resize_range[0], self.resize_range[1])
             y_scale = random.uniform(self.resize_range[0], self.resize_range[1])
-            resize = (lambda img, center: resize_crop(img, center, self.height, self.width, x_scale, y_scale))
+            resize = (lambda img, center: resize_crop(img, center, x_scale, y_scale))
         else:
             x_scale = 1
             y_scale = 1
