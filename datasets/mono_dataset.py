@@ -11,11 +11,12 @@ import random
 import numpy as np
 import copy
 from PIL import Image  # using pillow-simd for increased speed
+import math
 
 import torch
 import torch.utils.data as data
 from torchvision import transforms
-
+import torchvision.transforms.functional as F
 
 def pil_loader(path):
     # open path as file to avoid ResourceWarning
@@ -23,6 +24,69 @@ def pil_loader(path):
     with open(path, 'rb') as f:
         with Image.open(f) as img:
             return img.convert('RGB')
+
+
+# Construct a rotation matrix in the same way as PIL
+def R_matrix(deg, center=None):
+    R = np.identity(4, dtype=np.float32)
+
+    # If no rotation, return identity
+    if deg == 0:
+        return R
+
+    # Convert to radians
+    rad = -math.radians(deg)
+
+    # Fill in entries of R matrix
+    R[[0,1],[0,1]] = round(math.cos(rad), 15)
+    R[0,1] = round(-math.sin(rad), 15)
+    R[1,0] = round(math.sin(rad), 15)
+
+    # If center is true, Construct R so it rotates pixels around the center of img
+    if center is not None:
+        T = np.identity(4)
+        T[0,2] = center[0]
+        T[1,2] = center[1]
+        Tp = T.copy()
+        Tp[0,2] *= -1
+        Tp[1,2] *= -1
+
+        R = T @ R @ Tp
+
+    return R
+
+# Construct a scale matrix
+def scale_matrix(x_scale, y_scale, center=None):
+    S = np.identity(4)
+
+    if x_scale == 1 and y_scale == 1:
+        return S
+
+    # Fill in entries of R matrix
+    S[0,0] = x_scale
+    S[1,1] = y_scale
+
+    # If center is true, Construct R so it rotates pixels around the center of img
+    if center is not None:
+        T = np.identity(4)
+        T[0,2] = center[0]
+        T[1,2] = center[1]
+        Tp = T.copy()
+        Tp[0,2] *= -1
+        Tp[1,2] *= -1
+
+        S = T @ S @ Tp
+
+    return S
+
+def resize_crop(img, center, h, w, x_scale, y_scale):
+    hs = int(h/y_scale)
+    ws = int(w/x_scale)
+    i = int((h - hs)/2)
+    j = int((w - ws)/2)
+    resized_img = F.resized_crop(img, i, j, hs, ws, center)
+
+    return resized_img
 
 
 class MonoDataset(data.Dataset):
@@ -73,11 +137,15 @@ class MonoDataset(data.Dataset):
             self.hue = (-0.1, 0.1)
             transforms.ColorJitter.get_params(
                 self.brightness, self.contrast, self.saturation, self.hue)
+
         except TypeError:
             self.brightness = 0.2
             self.contrast = 0.2
             self.saturation = 0.2
             self.hue = 0.1
+
+        self.rot_degrees = (-5, 5)
+        self.resize_range = (0.95, 1.05)
 
         self.resize = {}
         for i in range(self.num_scales):
@@ -87,7 +155,7 @@ class MonoDataset(data.Dataset):
 
         self.load_depth = self.check_depth()
 
-    def preprocess(self, inputs, color_aug):
+    def preprocess(self, inputs, color_aug, rot, resize):
         """Resize colour images to the required scales and augment if required
 
         We create the color_aug object in advance and apply the same augmentation to all
@@ -106,7 +174,10 @@ class MonoDataset(data.Dataset):
             if "color" in k:
                 n, im, i = k
                 inputs[(n, im, i)] = self.to_tensor(f)
-                inputs[(n + "_aug", im, i)] = self.to_tensor(color_aug(f))
+                center_x = self.K[0,2]*(self.width // (2 ** i))
+                center_y = self.K[1,2]*(self.height // (2 ** i))
+                center = (center_x, center_y)
+                inputs[(n + "_aug", im, i)] = self.to_tensor(color_aug(resize(rot(f,center), center)))
 
     def __len__(self):
         return len(self.filenames)
@@ -139,6 +210,9 @@ class MonoDataset(data.Dataset):
 
         do_color_aug = self.is_train and random.random() > 0.5
         do_flip = self.is_train and random.random() > 0.5
+        do_rot = self.is_train and random.random() > 0.5
+        # do_resize = self.is_train and random.random() > 0.5
+        do_resize = False
 
         line = self.filenames[index].split()
         folder = line[0]
@@ -160,12 +234,34 @@ class MonoDataset(data.Dataset):
             else:
                 inputs[("color", i, -1)] = self.get_color(folder, frame_index + i, side, do_flip)
 
+        if do_rot:
+            deg = random.uniform(self.rot_degrees[0], self.rot_degrees[1])
+            rot = (lambda img, center: F.rotate(img, deg, center=center))
+        else:
+            deg = 0
+            rot = (lambda img, center: img)
+
+        if do_resize:
+            x_scale = random.uniform(self.resize_range[0], self.resize_range[1])
+            y_scale = random.uniform(self.resize_range[0], self.resize_range[1])
+            resize = (lambda img, center: resize_crop(img, center, self.height, self.width, x_scale, y_scale))
+        else:
+            x_scale = 1
+            y_scale = 1
+            resize = (lambda img, center: img)
+
         # adjusting intrinsics to match each scale in the pyramid
         for scale in range(self.num_scales):
             K = self.K.copy()
 
             K[0, :] *= self.width // (2 ** scale)
             K[1, :] *= self.height // (2 ** scale)
+
+            # Apply rotation
+            center_pt = (K[0,2], K[1,2])
+            R = R_matrix(deg, center_pt)
+            S = scale_matrix(x_scale, y_scale, center_pt)
+            K = np.float32(S @ R @ K)
 
             inv_K = np.linalg.pinv(K)
 
@@ -178,7 +274,7 @@ class MonoDataset(data.Dataset):
         else:
             color_aug = (lambda x: x)
 
-        self.preprocess(inputs, color_aug)
+        self.preprocess(inputs, color_aug, rot, resize)
 
         for i in self.frame_idxs:
             del inputs[("color", i, -1)]

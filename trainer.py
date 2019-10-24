@@ -575,7 +575,7 @@ class Trainer:
                 for frame_id in self.opt.frame_ids:
                     writer.add_image(
                         "color_{}_{}/{}".format(frame_id, s, j),
-                        inputs[("color", frame_id, s)][j].data, self.step)
+                        inputs[("color_aug", frame_id, s)][j].data, self.step)
                     if s == 0 and frame_id != 0:
                         writer.add_image(
                             "color_pred_{}_{}/{}".format(frame_id, s, j),
