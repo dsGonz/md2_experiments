@@ -87,8 +87,6 @@ def resize_crop(img, center, x_scale, y_scale):
     w, h = img.size
     hs = int(h/y_scale)
     ws = int(w/x_scale)
-    # i = int((h - hs)/2)
-    # j = int((w - ws)/2)
     i = int(center[1] - hs/2)
     j = int(center[0] - ws/2)
     resized_img = F.resized_crop(img, i, j, hs, ws, (h,w))
@@ -269,7 +267,7 @@ class MonoDataset(data.Dataset):
             center_pt = (K[0,2], K[1,2])
             R = R_matrix(deg, center_pt)
             S = scale_matrix(x_scale, y_scale, center_pt)
-            K = np.float32(S @ R @ K)
+            # K = np.float32(S @ R @ K)
 
             inv_K = np.linalg.pinv(K)
 
