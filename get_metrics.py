@@ -28,6 +28,7 @@ matplotlib.use("agg")
 import matplotlib.pyplot as plt
 import time
 import datasets
+from matplotlib import cm
 from os.path import abspath, join
 from evaluate_depth import compute_errors
 
@@ -42,12 +43,12 @@ from utils import download_model_if_doesnt_exist, readlines, normalize_image
 
 
 # Config
-MIN_DEPTH = 0.5
-MAX_DEPTH = 8.0
+MIN_DEPTH = 0.1
+MAX_DEPTH = 100.0
 dpath_root = '/mnt/data0-nfs/shared-datasets/'
 dset_type = 'kitti_data'
 split = 'eigen_zhou'
-model_name = 'ssim_4'
+model_name = 'kitti_test_run'
 epoch_num = 19
 num_scales = 4
 visualize = True
@@ -94,9 +95,11 @@ print('Loaded {} validation images from SPLIT: {}  DATASET: {}'.format(len(datal
 dest_path = join(abspath('./outputs'), model_name)
 if not os.path.isdir(dest_path):
     os.makedirs(dest_path)
-    os.makedirs(join(dest_path, 'dense_depth'))
-    os.makedirs(join(dest_path, 'registered_depth'))
-    os.makedirs(join(dest_path, 'viz'))
+    if write_depths:
+        os.makedirs(join(dest_path, 'dense_depth'))
+        os.makedirs(join(dest_path, 'registered_depth'))
+    if visualize:
+        os.makedirs(join(dest_path, 'viz'))
 
 # Get predictions. Time the duration
 start = time.time()
@@ -105,6 +108,7 @@ print('Evaluating...')
 with torch.no_grad():
 
     errors = []
+    error_table = {}
     ratios = []
     derrors = {90:[],80:[],70:[]}
     dmin = {90:100,80:100,70:100}
@@ -145,34 +149,34 @@ with torch.no_grad():
         pred_depth[pred_depth < MIN_DEPTH] = MIN_DEPTH
         pred_depth[pred_depth > MAX_DEPTH] = MAX_DEPTH
         
-        # Save the a1 error
+        # Save the error for each sample
         err = compute_errors(gt_depth, pred_depth)
         errors.append(err)
-        err_str = '{:1.3f}'.format(err[4]).replace('.','')
-        
+        error_table[fid] = err
+
         # Get depth stats
-        diff_depth = np.abs(gt_depth - pred_depth)
-        diff_avg = np.mean(diff_depth)
-        diff_min = np.min(diff_depth)
-        diff_max = np.max(diff_depth)
-        if err[4] >= 0.9:
-            derrors[90].append(diff_avg)
-            if diff_min < dmin[90]: 
-                dmin[90] = diff_min
-            if diff_max > dmax[90]:
-                dmax[90] = diff_max
-        elif err[4] >= 0.8:
-            derrors[80].append(diff_avg)
-            if diff_min < dmin[80]: 
-                dmin[80] = diff_min
-            if diff_max > dmax[80]:
-                dmax[80] = diff_max
-        elif err[4] >= 0.7:
-            derrors[70].append(diff_avg)
-            if diff_min < dmin[70]: 
-                dmin[70] = diff_min
-            if diff_max > dmax[70]:
-                dmax[70] = diff_max
+        # diff_depth = np.abs(gt_depth - pred_depth)
+        # diff_avg = np.mean(diff_depth)
+        # diff_min = np.min(diff_depth)
+        # diff_max = np.max(diff_depth)
+        # if err[4] >= 0.9:
+        #     derrors[90].append(diff_avg)
+        #     if diff_min < dmin[90]: 
+        #         dmin[90] = diff_min
+        #     if diff_max > dmax[90]:
+        #         dmax[90] = diff_max
+        # elif err[4] >= 0.8:
+        #     derrors[80].append(diff_avg)
+        #     if diff_min < dmin[80]: 
+        #         dmin[80] = diff_min
+        #     if diff_max > dmax[80]:
+        #         dmax[80] = diff_max
+        # elif err[4] >= 0.7:
+        #     derrors[70].append(diff_avg)
+        #     if diff_min < dmin[70]: 
+        #         dmin[70] = diff_min
+        #     if diff_max > dmax[70]:
+        #         dmax[70] = diff_max
 
         if write_depths:
             dmap_pred = 1 / pred_disp
@@ -204,33 +208,39 @@ with torch.no_grad():
             dmap_wrong[mask] = dwrong
             
             # Save depths as imgs
-            img = pil.fromarray(dmap_gt*255).convert('RGB')
-            img.save('outputs/{}/viz/{}_{:05}_dmap_0.jpg'.format(model_name, err_str, fid))
+            viz_dmap = np.uint8(cm.viridis(dmap_gt)*255)
+            viz_dmap[not_mask] = 0
+            img = pil.fromarray(viz_dmap).convert('RGB')
+            img.save('outputs/{}/viz/{:05}_dmap_0.jpg'.format(model_name, fid))
             img = pil.fromarray(dmap_pred*255).convert('RGB')
-            img.save('outputs/{}/viz/{}_{:05}_dmap_1.jpg'.format(model_name, err_str, fid))
+            img.save('outputs/{}/viz/{:05}_dmap_1.jpg'.format(model_name, fid))
             img = pil.fromarray(dmap_diff*255).convert('RGB')
-            img.save('outputs/{}/viz/{}_{:05}_dmap_2.jpg'.format(model_name, err_str, fid))
+            img.save('outputs/{}/viz/{:05}_dmap_2.jpg'.format(model_name, fid))
             img = pil.fromarray(dmap_wrong*255).convert('RGB')
-            img.save('outputs/{}/viz/{}_{:05}_dmap_3.jpg'.format(model_name, err_str, fid))
+            img.save('outputs/{}/viz/{:05}_dmap_3.jpg'.format(model_name, fid))
 
             # Get normalized disp map and save as img
             norm_pred_disp = normalize_image(output[("disp",0)]).cpu()[:,0].numpy()[0]
             norm_pred_disp = cv2.resize(norm_pred_disp, (gt_w, gt_h))
             img = pil.fromarray(norm_pred_disp*255).convert('RGB')
-            img.save('outputs/{}/viz/{}_{:05}_disp.jpg'.format(model_name, err_str, fid))
+            img.save('outputs/{}/viz/{:05}_disp.jpg'.format(model_name, fid))
 
             cimg = data[("color", 0, 0)].cpu().numpy()[0]
             cimg = np.moveaxis(cimg, 0, -1)
             cimg = cv2.resize(cimg, (gt_w, gt_h))
             cimg = np.uint8(cimg*255)
             img = pil.fromarray(np.uint8(cimg))#.convert('RGB')
-            img.save('outputs/{}/viz/{}_{:05}_color.jpg'.format(model_name, err_str, fid))
+            img.save('outputs/{}/viz/{:05}_color.jpg'.format(model_name, fid))
 
         fid += 1
         
 
     mean_errors = np.array(errors).mean(0)
     ratios = np.array(ratios)
+
+    # Save errors to a file
+    error_path = join(dest_path,'error_table.npy')
+    np.save(error_path, error_table)
 
     print('\nEvaluation Metrics')
     print("  " + ("{:>8} | " * 7).format("abs_rel", "sq_rel", "rmse", "rmse_log", "a1", "a2", "a3"))
@@ -242,17 +252,17 @@ with torch.no_grad():
     print(("&{: 8.3f}  " * 5).format(np.min(ratios), np.max(ratios), np.mean(ratios), np.std(ratios), np.median(ratios)) + "\\\\")
 
     # Get stats on the depth errors 
-    print('\n0.9 Depth Error Metrics')
-    print("  " + ("{:>8} | " * 3).format("min", "max", "mean"))
-    print(("&{: 8.3f}  " * 3).format(dmin[90], dmax[90], np.mean(derrors[90])) + "\\\\")
+    # print('\n0.9 Depth Error Metrics')
+    # print("  " + ("{:>8} | " * 3).format("min", "max", "mean"))
+    # print(("&{: 8.3f}  " * 3).format(dmin[90], dmax[90], np.mean(derrors[90])) + "\\\\")
 
-    print('\n0.8 Depth Error Metrics')
-    print("  " + ("{:>8} | " * 3).format("min", "max", "mean"))
-    print(("&{: 8.3f}  " * 3).format(dmin[80], dmax[80], np.mean(derrors[80])) + "\\\\")
+    # print('\n0.8 Depth Error Metrics')
+    # print("  " + ("{:>8} | " * 3).format("min", "max", "mean"))
+    # print(("&{: 8.3f}  " * 3).format(dmin[80], dmax[80], np.mean(derrors[80])) + "\\\\")
 
-    print('\n0.7 Depth Error Metrics')
-    print("  " + ("{:>8} | " * 3).format("min", "max", "mean"))
-    print(("&{: 8.3f}  " * 3).format(dmin[70], dmax[70], np.mean(derrors[70])) + "\\\\")
+    # print('\n0.7 Depth Error Metrics')
+    # print("  " + ("{:>8} | " * 3).format("min", "max", "mean"))
+    # print(("&{: 8.3f}  " * 3).format(dmin[70], dmax[70], np.mean(derrors[70])) + "\\\\")
     dur = round(time.time() - start, 4)
     print("\n-> Done! Time: {} sec".format(dur))
 
