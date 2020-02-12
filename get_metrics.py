@@ -41,6 +41,10 @@ from layers import disp_to_depth
 import networks
 from utils import download_model_if_doesnt_exist, readlines, normalize_image
 
+def convertToPILFormat(depth_image):
+    viz_dmap = np.uint8(cm.viridis(depth_image)*255)
+
+    return viz_dmap
 
 # Config
 MIN_DEPTH = 0.1
@@ -110,9 +114,6 @@ with torch.no_grad():
     errors = []
     error_table = {}
     ratios = []
-    derrors = {90:[],80:[],70:[]}
-    dmin = {90:100,80:100,70:100}
-    dmax = {90:0,80:0,70:0}
 
     fid = 0
     for data in dataloader:
@@ -154,29 +155,6 @@ with torch.no_grad():
         errors.append(err)
         error_table[fid] = err
 
-        # Get depth stats
-        # diff_depth = np.abs(gt_depth - pred_depth)
-        # diff_avg = np.mean(diff_depth)
-        # diff_min = np.min(diff_depth)
-        # diff_max = np.max(diff_depth)
-        # if err[4] >= 0.9:
-        #     derrors[90].append(diff_avg)
-        #     if diff_min < dmin[90]: 
-        #         dmin[90] = diff_min
-        #     if diff_max > dmax[90]:
-        #         dmax[90] = diff_max
-        # elif err[4] >= 0.8:
-        #     derrors[80].append(diff_avg)
-        #     if diff_min < dmin[80]: 
-        #         dmin[80] = diff_min
-        #     if diff_max > dmax[80]:
-        #         dmax[80] = diff_max
-        # elif err[4] >= 0.7:
-        #     derrors[70].append(diff_avg)
-        #     if diff_min < dmin[70]: 
-        #         dmin[70] = diff_min
-        #     if diff_max > dmax[70]:
-        #         dmax[70] = diff_max
 
         if write_depths:
             dmap_pred = 1 / pred_disp
@@ -188,7 +166,6 @@ with torch.no_grad():
             np.save('outputs/{}/registered_depth/{:05}_pred_reg.npy'.format(model_name, fid), dmap_pred)
             
 
-        
         if visualize:
             # Get Registered depth maps
             dmap_gt = np.zeros(mask.shape)
@@ -203,28 +180,28 @@ with torch.no_grad():
             thresh = np.maximum((gt_depth / pred_depth), (pred_depth / gt_depth))
             a1_mask = np.where(thresh > 1.25)
             dwrong = np.zeros(gt_depth.shape)
-            dwrong[a1_mask] = dmap_diff[mask][a1_mask]
+            dwrong[a1_mask] = 1 
             dmap_wrong = np.zeros(dmap_diff.shape)
             dmap_wrong[mask] = dwrong
             
             # Save depths as imgs
-            viz_dmap = np.uint8(cm.viridis(dmap_gt)*255)
-            viz_dmap[not_mask] = 0
-            img = pil.fromarray(viz_dmap).convert('RGB')
-            img.save('outputs/{}/viz/{:05}_dmap_0.jpg'.format(model_name, fid))
-            img = pil.fromarray(dmap_pred*255).convert('RGB')
-            img.save('outputs/{}/viz/{:05}_dmap_1.jpg'.format(model_name, fid))
-            img = pil.fromarray(dmap_diff*255).convert('RGB')
-            img.save('outputs/{}/viz/{:05}_dmap_2.jpg'.format(model_name, fid))
-            img = pil.fromarray(dmap_wrong*255).convert('RGB')
-            img.save('outputs/{}/viz/{:05}_dmap_3.jpg'.format(model_name, fid))
+            depth_maps = [dmap_gt, dmap_pred, dmap_diff, dmap_wrong]
+            for i in range(len(depth_maps)):
+                viz_dimage = convertToPILFormat(depth_maps[i])
+                
+                if i != 3:
+                    viz_dimage[not_mask] = 0
 
-            # Get normalized disp map and save as img
+                img = pil.fromarray(viz_dimage).convert('RGB')
+                img.save('outputs/{}/viz/{:05}_dmap_{}.jpg'.format(model_name, fid, i))
+
+            # Get normalized disparity map and save as img
             norm_pred_disp = normalize_image(output[("disp",0)]).cpu()[:,0].numpy()[0]
             norm_pred_disp = cv2.resize(norm_pred_disp, (gt_w, gt_h))
-            img = pil.fromarray(norm_pred_disp*255).convert('RGB')
+            img = pil.fromarray(convertToPILFormat(norm_pred_disp)).convert('RGB')
             img.save('outputs/{}/viz/{:05}_disp.jpg'.format(model_name, fid))
 
+            # Save color image 
             cimg = data[("color", 0, 0)].cpu().numpy()[0]
             cimg = np.moveaxis(cimg, 0, -1)
             cimg = cv2.resize(cimg, (gt_w, gt_h))
@@ -234,13 +211,15 @@ with torch.no_grad():
 
         fid += 1
         
-
+    # Average all errors
     mean_errors = np.array(errors).mean(0)
     ratios = np.array(ratios)
 
     # Save errors to a file
     error_path = join(dest_path,'error_table.npy')
+    mean_error_path = join(dest_path,'mean_error.npy')
     np.save(error_path, error_table)
+    np.save(mean_error_path, mean_errors)
 
     print('\nEvaluation Metrics')
     print("  " + ("{:>8} | " * 7).format("abs_rel", "sq_rel", "rmse", "rmse_log", "a1", "a2", "a3"))
@@ -251,18 +230,7 @@ with torch.no_grad():
     print("  " + ("{:>8} | " * 5).format("min", "max", "mean", "std", "median"))
     print(("&{: 8.3f}  " * 5).format(np.min(ratios), np.max(ratios), np.mean(ratios), np.std(ratios), np.median(ratios)) + "\\\\")
 
-    # Get stats on the depth errors 
-    # print('\n0.9 Depth Error Metrics')
-    # print("  " + ("{:>8} | " * 3).format("min", "max", "mean"))
-    # print(("&{: 8.3f}  " * 3).format(dmin[90], dmax[90], np.mean(derrors[90])) + "\\\\")
-
-    # print('\n0.8 Depth Error Metrics')
-    # print("  " + ("{:>8} | " * 3).format("min", "max", "mean"))
-    # print(("&{: 8.3f}  " * 3).format(dmin[80], dmax[80], np.mean(derrors[80])) + "\\\\")
-
-    # print('\n0.7 Depth Error Metrics')
-    # print("  " + ("{:>8} | " * 3).format("min", "max", "mean"))
-    # print(("&{: 8.3f}  " * 3).format(dmin[70], dmax[70], np.mean(derrors[70])) + "\\\\")
+    # Get duration 
     dur = round(time.time() - start, 4)
     print("\n-> Done! Time: {} sec".format(dur))
 

@@ -115,7 +115,8 @@ class Trainer:
         # data
         datasets_dict = {"kitti": datasets.KITTIRAWDataset,
                         "kitti_odom": datasets.KITTIOdomDataset,
-                        'office': datasets.OfficeRAWDataset}
+                        'office': datasets.OfficeRAWDataset,
+                        'gtav': datasets.GTAVRAWDataset}
         # datasets_dict = {'office': datasets.OfficeRAWDataset}
         self.dataset = datasets_dict[self.opt.dataset]
 
