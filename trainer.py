@@ -528,7 +528,8 @@ class Trainer:
         This isn't particularly accurate as it averages over the entire batch,
         so is only used to give an indication of validation performance
         """
-        orig_w, orig_h = (1242, 375) #self.dataset.full_res_shape
+        orig_w, orig_h = (1920, 1080) #self.dataset.full_res_shape
+        # orig_w, orig_h = self.dataset.full_res_shape
 
         depth_pred = outputs[("depth", 0, 0)]
         depth_pred = torch.clamp(F.interpolate(

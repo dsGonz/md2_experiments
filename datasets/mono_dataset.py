@@ -216,9 +216,9 @@ class MonoDataset(data.Dataset):
         do_color_aug = self.is_train and random.random() > 0.5
         do_flip = self.is_train and random.random() > 0.5
         # do_rot = self.is_train and random.random() > 0.5
-        do_resize = self.is_train and random.random() > 0.5
+        # do_resize = self.is_train and random.random() > 0.5
         do_rot = False
-        # do_resize = False
+        do_resize = False
 
         line = self.filenames[index].split()
         folder = line[0]
@@ -249,7 +249,8 @@ class MonoDataset(data.Dataset):
 
         if do_resize:
             x_scale = random.uniform(self.resize_range[0], self.resize_range[1])
-            y_scale = random.uniform(self.resize_range[0], self.resize_range[1])
+            # y_scale = random.uniform(self.resize_range[0], self.resize_range[1])
+            y_scale = x_scale
             resize = (lambda img, center: resize_crop(img, center, x_scale, y_scale))
         else:
             x_scale = 1
