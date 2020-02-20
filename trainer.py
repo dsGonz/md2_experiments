@@ -528,7 +528,9 @@ class Trainer:
         This isn't particularly accurate as it averages over the entire batch,
         so is only used to give an indication of validation performance
         """
-        orig_w, orig_h = (1242, 375) #self.dataset.full_res_shape
+        orig_w, orig_h = (1920, 1080) 
+        # orig_w, orig_h = (1242, 375) 
+        # orig_w, orig_h = self.dataset.full_res_shape
 
         depth_pred = outputs[("depth", 0, 0)]
         depth_pred = torch.clamp(F.interpolate(
@@ -576,7 +578,7 @@ class Trainer:
                 for frame_id in self.opt.frame_ids:
                     writer.add_image(
                         "color_{}_{}/{}".format(frame_id, s, j),
-                        inputs[("color_aug", frame_id, s)][j].data, self.step)
+                        inputs[("color", frame_id, s)][j].data, self.step)
                     if s == 0 and frame_id != 0:
                         writer.add_image(
                             "color_pred_{}_{}/{}".format(frame_id, s, j),
