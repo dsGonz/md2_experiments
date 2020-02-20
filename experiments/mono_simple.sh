@@ -1,5 +1,5 @@
 # Our standard mono model
-EXP_NUM="aug_rsro1"
+EXP_NUM="temp"
 SPLIT="eigen_zhou"
 DEVICE_NO=0
 CUDA_VISIBLE_DEVICES=$DEVICE_NO python3 ../train.py --model_name $EXP_NUM\

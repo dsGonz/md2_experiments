@@ -40,9 +40,10 @@ class GTAVDataset(MonoDataset):
 
         depth_filename = os.path.join(
                 self.data_path,
-                'depth',
-                '{:06d}.bin'.format(frame_index))
+                'depth/depth_numpy',
+                '{:06d}.npy'.format(frame_index))
 
+        return False 
         return os.path.isfile(depth_filename)
 
     def get_color(self, folder, frame_index, side, do_flip):
@@ -69,14 +70,13 @@ class GTAVRAWDataset(GTAVDataset):
         return image_path
 
     def get_depth(self, folder, frame_index, side, do_flip):
-        f_str = "{:06d}.bin".format(frame_index)
+        f_str = "{:06d}.npy".format(frame_index)
         depth_filename = os.path.join(
               self.data_path,
-              'depth',
+              'depth/depth_numpy',
               f_str)
 
-        # depth_gt = np.load(depth_filename)
-        depth_gt = self.ndcToDepth(depth_filename)
+        depth_gt = np.load(depth_filename)
 
         if do_flip:
             depth_gt = np.fliplr(depth_gt)
