@@ -90,9 +90,9 @@ class GTAVRAWDataset(GTAVDataset):
         fov_v = 59 #degrees
         nc_h = 2 * nc_z * math.tan(fov_v / 2.0)
         nc_w = 1920 / 1080.0 * nc_h
-    
+
         depth = np.zeros((img_h,img_w))
-    
+
         # Iterate through values
         # d_nc could be saved as it is identical for each computation
         # Then the rest of the calculations could be vectorized
@@ -101,12 +101,12 @@ class GTAVRAWDataset(GTAVDataset):
             for i in range(0,img_w):
                 nc_x = abs(((2 * i) / (img_w - 1.0)) - 1) * nc_w / 2.0
                 nc_y = abs(((2 * j) / (img_h - 1.0)) - 1) * nc_h / 2.0
-    
+
                 d_nc = math.sqrt(pow(nc_x,2) + pow(nc_y,2) + pow(nc_z,2))
                 depth[j,i] = d_nc / (ndc[j,i] + (nc_z * d_nc / (2 * fc_z)))
                 if ndc[j,i] == 0.0:
                     depth[j,i] = fc_z
-    
+
         return depth
 
 
