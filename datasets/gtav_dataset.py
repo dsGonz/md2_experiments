@@ -94,32 +94,13 @@ class GTAVRAWDataset(GTAVDataset):
         nc_w = 1920 / 1080.0 * nc_h
 
         depth = np.zeros((img_h,img_w))
-<<<<<<< HEAD
 
-=======
         
         fd = open(depth_filename, 'rb')
         f = np.fromfile(fd, dtype=np.float32, count=img_h*img_w)
         ndc = f.reshape((img_h, img_w))
     
->>>>>>> bc41cba6570122727d842067664f4a2a5b0e3556
-        # Iterate through values
-        # d_nc could be saved as it is identical for each computation
-        # Then the rest of the calculations could be vectorized
-        # TODO if need to use this frequently
-<<<<<<< HEAD
-        for j in range(0,img_h):
-            for i in range(0,img_w):
-                nc_x = abs(((2 * i) / (img_w - 1.0)) - 1) * nc_w / 2.0
-                nc_y = abs(((2 * j) / (img_h - 1.0)) - 1) * nc_h / 2.0
-
-                d_nc = math.sqrt(pow(nc_x,2) + pow(nc_y,2) + pow(nc_z,2))
-                depth[j,i] = d_nc / (ndc[j,i] + (nc_z * d_nc / (2 * fc_z)))
-                if ndc[j,i] == 0.0:
-                    depth[j,i] = fc_z
-
-=======
-        
+        # Vectorized approach 
         nc_x = np.abs(2 * np.arange(img_w) / (img_w - 1) - 1) * nc_w / 2.0
         nc_y = np.abs(2 * np.arange(img_h) / (img_h - 1) - 1) * nc_h / 2.0
 
@@ -129,6 +110,7 @@ class GTAVRAWDataset(GTAVDataset):
         d_nc = np.sqrt(np.power(nc_xx,2) + np.power(nc_yy,2) + np.power(nc_z,2))
         depth = d_nc / (ndc + (nc_z * d_nc / (2 * fc_z)))
 
+        # Original 
         # for j in range(0,img_h):
             # for i in range(0,img_w):
                 # nc_x = abs(((2 * i) / (img_w - 1.0)) - 1) * nc_w / 2.0
@@ -139,7 +121,6 @@ class GTAVRAWDataset(GTAVDataset):
                 # if ndc[j,i] == 0.0:
                     # depth[j,i] = fc_z
     
->>>>>>> bc41cba6570122727d842067664f4a2a5b0e3556
         return depth
 
 
