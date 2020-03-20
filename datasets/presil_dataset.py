@@ -16,11 +16,11 @@ from kitti_utils import generate_depth_map
 from .mono_dataset import MonoDataset
 
 
-class GTAVDataset(MonoDataset):
-    """Superclass for different types of GTAV dataset loaders
+class PreSILDataset(MonoDataset):
+    """Superclass for different types of PreSIL dataset loaders
     """
     def __init__(self, *args, **kwargs):
-        super(GTAVDataset, self).__init__(*args, **kwargs)
+        super(PreSILDataset, self).__init__(*args, **kwargs)
 
         self.K = np.array([[960, 0, 960, 0],
                            [0, 960, 384, 0],
@@ -55,19 +55,17 @@ class GTAVDataset(MonoDataset):
         return color
 
 
-class GTAVRAWDataset(GTAVDataset):
-    """GTAV dataset which loads the original velodyne depth maps for ground truth
+class PreSILRAWDataset(PreSILDataset):
+    """PreSIL dataset which loads the original velodyne depth maps for ground truth
     """
     def __init__(self, *args, **kwargs):
-        super(GTAVRAWDataset, self).__init__(*args, **kwargs)
+        super(PreSILRAWDataset, self).__init__(*args, **kwargs)
 
     def get_image_path(self, folder, frame_index, side):
         f_str = "{:06d}{}".format(frame_index, self.img_ext)
         image_path = os.path.join(
                 self.data_path,
-                'image_crop',
-                folder,
-                'image_2',
+                'image_crop2',
                 f_str)
         return image_path
 
@@ -128,11 +126,11 @@ class GTAVRAWDataset(GTAVDataset):
 
 
 # This aint right. Uses dense GT depths in the form of .PNG instead of .BIN
-class GTAVDepthDataset(GTAVDataset):
-    """GTAV dataset which uses the updated ground truth depth maps
+class PreSILDepthDataset(PreSILDataset):
+    """PreSIL dataset which uses the updated ground truth depth maps
     """
     def __init__(self, *args, **kwargs):
-        super(GTAVDepthDataset, self).__init__(*args, **kwargs)
+        super(PreSILDepthDataset, self).__init__(*args, **kwargs)
 
     def get_image_path(self, folder, frame_index, side):
         f_str = "{:06d}{}".format(frame_index, self.img_ext)
