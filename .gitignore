@@ -8,3 +8,5 @@ models
 splits/zebra_splits
 logs
 outputs
+blur_outputs
+depth_samples

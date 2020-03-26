@@ -32,8 +32,13 @@ def pilToTensor(image):
 
 
 def normalize_disp(tensor):
-    image = normalize_image(tensor).cpu()[:, 0].numpy()[0]
-    image = np.uint8(cm.viridis(image)*255)
+    viridis = cm.ScalarMappable(cmap='viridis')
+    viridis.set_clim(vmin=0, vmax=1)
+    viridis = viridis.get_cmap()
+
+    image = tensor.cpu()[:, 0].numpy()[0]
+    # image = np.uint8(cm.viridis(image)*255)
+    image = np.uint8(viridis(image)*255)
 
     return image
 

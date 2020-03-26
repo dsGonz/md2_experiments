@@ -19,7 +19,7 @@
 # Import packages
 from __future__ import absolute_import, division, print_function
 
-import os
+import os, sys
 import cv2
 import numpy as np
 import PIL.Image as pil
@@ -55,7 +55,7 @@ split = 'eigen_zhou'
 model_name = 'kitti_test_run'
 epoch_num = 19
 num_scales = 4
-visualize = True
+visualize = False
 write_depths = False
 
 # Set up network and load weights
@@ -117,6 +117,8 @@ with torch.no_grad():
 
     fid = 0
     for data in dataloader:
+        if fid > 100:
+            break
         # Get GT depth
         gt_depth = np.squeeze(data["depth_gt"].data.numpy())
         gt_h, gt_w = gt_depth.shape
@@ -141,7 +143,6 @@ with torch.no_grad():
 
         pred_depth = pred_depth[mask]
         gt_depth = gt_depth[mask]
-        
         # Median scaling
         ratio = np.median(gt_depth) / np.median(pred_depth)
         ratios.append(ratio)
@@ -149,7 +150,7 @@ with torch.no_grad():
 
         pred_depth[pred_depth < MIN_DEPTH] = MIN_DEPTH
         pred_depth[pred_depth > MAX_DEPTH] = MAX_DEPTH
-        
+
         # Save the error for each sample
         err = compute_errors(gt_depth, pred_depth)
         errors.append(err)
@@ -164,7 +165,7 @@ with torch.no_grad():
             np.save('outputs/{}/dense_depth/{:05}_pred.npy'.format(model_name, fid), dmap_pred)
             dmap_pred[not_mask] = 0
             np.save('outputs/{}/registered_depth/{:05}_pred_reg.npy'.format(model_name, fid), dmap_pred)
-            
+
 
         if visualize:
             # Get Registered depth maps
@@ -180,15 +181,15 @@ with torch.no_grad():
             thresh = np.maximum((gt_depth / pred_depth), (pred_depth / gt_depth))
             a1_mask = np.where(thresh > 1.25)
             dwrong = np.zeros(gt_depth.shape)
-            dwrong[a1_mask] = 1 
+            dwrong[a1_mask] = 1
             dmap_wrong = np.zeros(dmap_diff.shape)
             dmap_wrong[mask] = dwrong
-            
+
             # Save depths as imgs
             depth_maps = [dmap_gt, dmap_pred, dmap_diff, dmap_wrong]
             for i in range(len(depth_maps)):
                 viz_dimage = convertToPILFormat(depth_maps[i])
-                
+
                 if i != 3:
                     viz_dimage[not_mask] = 0
 
@@ -201,7 +202,7 @@ with torch.no_grad():
             img = pil.fromarray(convertToPILFormat(norm_pred_disp)).convert('RGB')
             img.save('outputs/{}/viz/{:05}_disp.jpg'.format(model_name, fid))
 
-            # Save color image 
+            # Save color image
             cimg = data[("color", 0, 0)].cpu().numpy()[0]
             cimg = np.moveaxis(cimg, 0, -1)
             cimg = cv2.resize(cimg, (gt_w, gt_h))
@@ -210,7 +211,7 @@ with torch.no_grad():
             img.save('outputs/{}/viz/{:05}_color.jpg'.format(model_name, fid))
 
         fid += 1
-        
+
     # Average all errors
     mean_errors = np.array(errors).mean(0)
     ratios = np.array(ratios)
