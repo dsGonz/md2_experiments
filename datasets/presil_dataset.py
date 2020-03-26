@@ -16,11 +16,11 @@ from kitti_utils import generate_depth_map
 from .mono_dataset import MonoDataset
 
 
-class GTAVDataset(MonoDataset):
-    """Superclass for different types of GTAV dataset loaders
+class PreSILDataset(MonoDataset):
+    """Superclass for different types of PreSIL dataset loaders
     """
     def __init__(self, *args, **kwargs):
-        super(GTAVDataset, self).__init__(*args, **kwargs)
+        super(PreSILDataset, self).__init__(*args, **kwargs)
 
         self.K = np.array([[960, 0, 960, 0],
                            [0, 960, 384, 0],
@@ -55,19 +55,17 @@ class GTAVDataset(MonoDataset):
         return color
 
 
-class GTAVRAWDataset(GTAVDataset):
-    """GTAV dataset which loads the original velodyne depth maps for ground truth
+class PreSILRAWDataset(PreSILDataset):
+    """PreSIL dataset which loads the original velodyne depth maps for ground truth
     """
     def __init__(self, *args, **kwargs):
-        super(GTAVRAWDataset, self).__init__(*args, **kwargs)
+        super(PreSILRAWDataset, self).__init__(*args, **kwargs)
 
     def get_image_path(self, folder, frame_index, side):
         f_str = "{:06d}{}".format(frame_index, self.img_ext)
         image_path = os.path.join(
                 self.data_path,
-                'image_crop',
-                folder,
-                'image_2',
+                'image_crop2',
                 f_str)
         return image_path
 
@@ -92,15 +90,18 @@ class GTAVRAWDataset(GTAVDataset):
         fov_v = 59 #degrees
         nc_h = 2 * nc_z * math.tan(fov_v / 2.0)
         nc_w = 1920 / 1080.0 * nc_h
-
+    
         depth = np.zeros((img_h,img_w))
-
         
         fd = open(depth_filename, 'rb')
         f = np.fromfile(fd, dtype=np.float32, count=img_h*img_w)
         ndc = f.reshape((img_h, img_w))
     
-        # Vectorized approach 
+        # Iterate through values
+        # d_nc could be saved as it is identical for each computation
+        # Then the rest of the calculations could be vectorized
+        # TODO if need to use this frequently
+        
         nc_x = np.abs(2 * np.arange(img_w) / (img_w - 1) - 1) * nc_w / 2.0
         nc_y = np.abs(2 * np.arange(img_h) / (img_h - 1) - 1) * nc_h / 2.0
 
@@ -110,7 +111,6 @@ class GTAVRAWDataset(GTAVDataset):
         d_nc = np.sqrt(np.power(nc_xx,2) + np.power(nc_yy,2) + np.power(nc_z,2))
         depth = d_nc / (ndc + (nc_z * d_nc / (2 * fc_z)))
 
-        # Original 
         # for j in range(0,img_h):
             # for i in range(0,img_w):
                 # nc_x = abs(((2 * i) / (img_w - 1.0)) - 1) * nc_w / 2.0
@@ -126,11 +126,11 @@ class GTAVRAWDataset(GTAVDataset):
 
 
 # This aint right. Uses dense GT depths in the form of .PNG instead of .BIN
-class GTAVDepthDataset(GTAVDataset):
-    """GTAV dataset which uses the updated ground truth depth maps
+class PreSILDepthDataset(PreSILDataset):
+    """PreSIL dataset which uses the updated ground truth depth maps
     """
     def __init__(self, *args, **kwargs):
-        super(GTAVDepthDataset, self).__init__(*args, **kwargs)
+        super(PreSILDepthDataset, self).__init__(*args, **kwargs)
 
     def get_image_path(self, folder, frame_index, side):
         f_str = "{:06d}{}".format(frame_index, self.img_ext)

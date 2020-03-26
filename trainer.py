@@ -116,6 +116,7 @@ class Trainer:
         datasets_dict = {"kitti": datasets.KITTIRAWDataset,
                         "kitti_odom": datasets.KITTIOdomDataset,
                         'office': datasets.OfficeRAWDataset,
+                        'presil': datasets.PreSILRAWDataset,
                         'gtav': datasets.GTAVRAWDataset}
         # datasets_dict = {'office': datasets.OfficeRAWDataset}
         self.dataset = datasets_dict[self.opt.dataset]
@@ -528,7 +529,9 @@ class Trainer:
         This isn't particularly accurate as it averages over the entire batch,
         so is only used to give an indication of validation performance
         """
-        orig_w, orig_h = (1920, 1080) 
+        # orig_w, orig_h = (1920, 1080) 
+        # orig_w, orig_h = (1920, 896) 
+        orig_w, orig_h = (1920, 768) 
         # orig_w, orig_h = (1242, 375) 
         # orig_w, orig_h = self.dataset.full_res_shape
 
