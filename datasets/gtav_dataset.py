@@ -40,10 +40,12 @@ class GTAVDataset(MonoDataset):
 
         depth_filename = os.path.join(
                 self.data_path,
-                'depth/depth_numpy',
+                'image_crop',
+                scene_name,
+                'depth',
                 '{:06d}.npy'.format(frame_index))
 
-        return False 
+        # return False
         return os.path.isfile(depth_filename)
 
     def get_color(self, folder, frame_index, side, do_flip):
@@ -75,7 +77,9 @@ class GTAVRAWDataset(GTAVDataset):
         f_str = "{:06d}.npy".format(frame_index)
         depth_filename = os.path.join(
               self.data_path,
-              'depth/depth_numpy',
+              'image_crop',
+              folder,
+              'depth',
               f_str)
 
         depth_gt = np.load(depth_filename)
@@ -95,11 +99,11 @@ class GTAVRAWDataset(GTAVDataset):
 
         depth = np.zeros((img_h,img_w))
 
-        
+
         fd = open(depth_filename, 'rb')
         f = np.fromfile(fd, dtype=np.float32, count=img_h*img_w)
         ndc = f.reshape((img_h, img_w))
-    
+
         # Vectorized approach 
         nc_x = np.abs(2 * np.arange(img_w) / (img_w - 1) - 1) * nc_w / 2.0
         nc_y = np.abs(2 * np.arange(img_h) / (img_h - 1) - 1) * nc_h / 2.0

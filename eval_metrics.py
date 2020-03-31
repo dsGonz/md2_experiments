@@ -41,7 +41,7 @@ def loadModel(model_name):
     weights_path = join(model_path, 'models', 'weights_{}'.format(epoch_num))
 
     # Load pretrained model options
-    with open(opts_path, 'rb') as f:
+    with open(opts_path, 'r') as f:
         opts = json.load(f)
     encoder = networks.ResnetEncoder(opts['num_layers'], False)
     depth_decoder = networks.DepthDecoder(num_ch_enc=encoder.num_ch_enc, scales=opts['scales'])
@@ -67,10 +67,17 @@ def loadModel(model_name):
 
 
 def load_data(args, opts):
-    data_path = join(dset_root_dir, args.dataset)
+    datasets_dict = {"kitti": datasets.KITTIRAWDataset,
+                     "kitti_odom": datasets.KITTIOdomDataset,
+                     "office": datasets.OfficeRAWDataset,
+                     "presil": datasets.PreSILRAWDataset,
+                     "gtav": datasets.GTAVRAWDataset}
+    dataset = datasets_dict[args.dataset]
+
+    data_path = opts['data_path']
     filenames = readlines(join('splits', opts['split'], 'val_files.txt'))
     num_scales = len(opts['scales'])
-    dataset = datasets.KITTIRAWDataset(data_path, filenames, opts['height'], opts['width'], [0], num_scales, is_train=False, img_ext='.png')
+    dataset = dataset(data_path, filenames, opts['height'], opts['width'], [0], num_scales, is_train=False, img_ext='.png')
     dataloader = DataLoader(dataset, 1, shuffle=False, num_workers=1, pin_memory=True, drop_last=False)
 
     return dataloader
@@ -97,6 +104,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     encoder, depth_decoder, opts = loadModel(args.model)
+    print("Loaded MODEL: {}".format(opts["model_name"]))
 
     print("Loading data")
     dataloader = load_data(args, opts)
@@ -111,17 +119,18 @@ if __name__ == '__main__':
     start = time.time()
     print('Evaluating...')
 
-    gt_depths = []
-    pred_disps = []
-    colors = []
+    # gt_depths = []
+    # pred_disps = []
+    # colors = []
     mind = opts['min_depth']
     maxd = opts['max_depth']
-    with torch.no_grad():
-        i = 0
-        for data in dataloader:
-            if i > 100:
-                break
 
+    errors = []
+    error_table = {}
+    ratios = []
+    with torch.no_grad():
+        fid = 0
+        for data in dataloader:
             # Get GT depth and disp map predictions
             color = data[("color", 0, 0)].cuda()
             pred_disp = depth_decoder(encoder(color))[("disp", 0)]
@@ -130,97 +139,95 @@ if __name__ == '__main__':
             color = np.squeeze(data[("color", 0, 0)].cpu().numpy())
 
             # Append to list
-            colors.append(color)
-            pred_disps.append(pred_disp)
-            gt_depths.append(gt_depth)
+            # colors.append(color)
+            # pred_disps.append(pred_disp)
+            # gt_depths.append(gt_depth)
 
-            i += 1
+            gt_h, gt_w = gt_depth.shape
 
-    errors = []
-    error_table = {}
-    ratios = []
-    gt_h, gt_w = gt_depths[0].shape
-
-    for fid in range(len(pred_disps)):
+    # for fid in range(len(pred_disps)):
         # Get GT depth and predicted disparity
-        color = colors[fid]
-        pred_disp = pred_disps[fid]
-        gt_depth = gt_depths[fid]
+        # color = colors[fid]
+        # pred_disp = pred_disps[fid]
+        # gt_depth = gt_depths[fid]
 
-        # Get errors
-        pred_disp = cv2.resize(pred_disp, (gt_w, gt_h))
-        _, pred_depth = disp_to_depth(pred_disp, mind, maxd)
-
-        mask = gt_depth > 0
-        not_mask = gt_depth == 0
-
-        # Skip image if depth map has no registered pixels
-        if np.sum(mask) == 0:
+            # Get errors
+            pred_disp = cv2.resize(pred_disp, (gt_w, gt_h))
+            _, pred_depth = disp_to_depth(pred_disp, mind, maxd)
+    
+            mask = gt_depth > 0
+            not_mask = gt_depth == 0
+    
+            # Skip image if depth map has no registered pixels
+            if np.sum(mask) == 0:
+                fid += 1
+                continue
+    
+            pred_depth = pred_depth[mask]
+            gt_depth = gt_depth[mask]
+    
+            # Median scaling
+            ratio = np.median(gt_depth) / np.median(pred_depth)
+            ratios.append(ratio)
+            pred_depth *= ratio
+    
+            # Truncate depths
+            pred_depth[pred_depth < mind] = mind
+            pred_depth[pred_depth > maxd] = maxd
+    
+            # Save the error for each sample
+            err = compute_errors(gt_depth, pred_depth)
+            errors.append(err)
+            error_table[fid] = err
+    
+            if args.write_depths:
+                dmap_pred = 1 / pred_disp
+                dmap_pred *= ratio
+                np.save('outputs/{}/dense_depth/{:05}_pred.npy'.format(args.model, fid), dmap_pred)
+                dmap_pred[not_mask] = 0
+                np.save('outputs/{}/registered_depth/{:05}_pred_reg.npy'.format(args.model, fid), dmap_pred)
+    
+            if args.visualize:
+                # Get Registered depth maps
+                dmap_gt = np.zeros(mask.shape)
+                dmap_pred = np.zeros(mask.shape)
+    
+                # Normalize depth maps to range 0-1
+                dmap_gt[mask] = (gt_depth - mind) / (maxd - mind)
+                dmap_pred[mask] = (pred_depth - mind) / (maxd - mind)
+                dmap_diff = np.abs(dmap_gt - dmap_pred)
+    
+                # Get the pixels that are outside of the threshold and display them
+                thresh = np.maximum((gt_depth / pred_depth), (pred_depth / gt_depth))
+                a1_mask = np.where(thresh > 1.25)
+                dwrong = np.zeros(gt_depth.shape)
+                dwrong[a1_mask] = 1
+                dmap_wrong = np.zeros(dmap_diff.shape)
+                dmap_wrong[mask] = dwrong
+    
+                # Save depth visuals as images
+                depth_maps = [dmap_gt, dmap_pred, dmap_diff, dmap_wrong]
+                for i in range(len(depth_maps)):
+                    # Turn into color map and remove invalid pixels
+                    viz_dimage = colormap(depth_maps[i])
+                    viz_dimage[not_mask] = 0
+    
+                    # Save each visual
+                    img = pil.fromarray(viz_dimage).convert('RGB')
+                    img.save('outputs/{}/viz/{:05}_dmap_{}.jpg'.format(args.model, fid, i))
+    
+                # Save disparity map
+                img = pil.fromarray(colormap(pred_disp)).convert('RGB')
+                img.save('outputs/{}/viz/{:05}_disp.jpg'.format(args.model, fid))
+    
+                # Save color image
+                color = np.moveaxis(color, 0, -1)
+                img = pil.fromarray(np.uint8(color*255))
+                img = img.resize((gt_w, gt_h))
+                img.save('outputs/{}/viz/{:05}_color.jpg'.format(args.model, fid))
+    
+            print("Processed {}".format(fid))
             fid += 1
-            continue
-
-        pred_depth = pred_depth[mask]
-        gt_depth = gt_depth[mask]
-
-        # Median scaling
-        ratio = np.median(gt_depth) / np.median(pred_depth)
-        ratios.append(ratio)
-        pred_depth *= ratio
-
-        # Truncate depths
-        pred_depth[pred_depth < mind] = mind
-        pred_depth[pred_depth > maxd] = maxd
-
-        # Save the error for each sample
-        err = compute_errors(gt_depth, pred_depth)
-        errors.append(err)
-        error_table[fid] = err
-
-        if args.write_depths:
-            dmap_pred = 1 / pred_disp
-            dmap_pred *= ratio
-            np.save('outputs/{}/dense_depth/{:05}_pred.npy'.format(args.model, fid), dmap_pred)
-            dmap_pred[not_mask] = 0
-            np.save('outputs/{}/registered_depth/{:05}_pred_reg.npy'.format(args.model, fid), dmap_pred)
-
-        if args.visualize:
-            # Get Registered depth maps
-            dmap_gt = np.zeros(mask.shape)
-            dmap_pred = np.zeros(mask.shape)
-
-            # Normalize depth maps to range 0-1
-            dmap_gt[mask] = (gt_depth - mind) / (maxd - mind)
-            dmap_pred[mask] = (pred_depth - mind) / (maxd - mind)
-            dmap_diff = np.abs(dmap_gt - dmap_pred)
-
-            # Get the pixels that are outside of the threshold and display them
-            thresh = np.maximum((gt_depth / pred_depth), (pred_depth / gt_depth))
-            a1_mask = np.where(thresh > 1.25)
-            dwrong = np.zeros(gt_depth.shape)
-            dwrong[a1_mask] = 1
-            dmap_wrong = np.zeros(dmap_diff.shape)
-            dmap_wrong[mask] = dwrong
-
-            # Save depth visuals as images
-            depth_maps = [dmap_gt, dmap_pred, dmap_diff, dmap_wrong]
-            for i in range(len(depth_maps)):
-                # Turn into color map and remove invalid pixels
-                viz_dimage = colormap(depth_maps[i])
-                viz_dimage[not_mask] = 0
-
-                # Save each visual
-                img = pil.fromarray(viz_dimage).convert('RGB')
-                img.save('outputs/{}/viz/{:05}_dmap_{}.jpg'.format(args.model, fid, i))
-
-            # Save disparity map
-            img = pil.fromarray(colormap(pred_disp)).convert('RGB')
-            img.save('outputs/{}/viz/{:05}_disp.jpg'.format(args.model, fid))
-
-            # Save color image
-            color = np.moveaxis(color, 0, -1)
-            img = pil.fromarray(np.uint8(color*255))
-            img = img.resize((gt_w, gt_h))
-            img.save('outputs/{}/viz/{:05}_color.jpg'.format(args.model, fid))
 
     # Average all errors
     mean_errors = np.array(errors).mean(0)

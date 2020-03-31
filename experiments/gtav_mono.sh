@@ -1,6 +1,6 @@
 # Our standard mono model
-EXP_NUM="gtav_open_road_1"
-SPLIT="gtav_openroad_10hz"
+EXP_NUM="gtav_open_road_2"
+SPLIT="gtav_openroad"
 DPATH="/mnt/data0-nfs/shared-datasets/gtav_data/"
 DEVICE_NO=0
 CUDA_VISIBLE_DEVICES=$DEVICE_NO python3 ../train.py --model_name $EXP_NUM\

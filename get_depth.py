@@ -54,7 +54,7 @@ def loadModel(model_name):
     weights_path = join(model_path, 'models', 'weights_{}'.format(epoch_num))
 
     # Load pretrained model options
-    with open(opts_path, 'rb') as f:
+    with open(opts_path, 'r') as f:
         opts = json.load(f)
     encoder = networks.ResnetEncoder(opts['num_layers'], False)
     depth_decoder = networks.DepthDecoder(num_ch_enc=encoder.num_ch_enc, scales=opts['scales'])
