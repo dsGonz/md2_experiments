@@ -21,7 +21,7 @@ from utils import readlines
 
 # CONSTANTS
 epoch_num = 19
-dset_root_dir = '/mnt/data0-nfs/shared-datasets/'
+data_path_root= '/mnt/data0-nfs/shared-datasets/'
 
 
 def colormap(tensor):
@@ -74,8 +74,8 @@ def load_data(args, opts):
                      "gtav": datasets.GTAVRAWDataset}
     dataset = datasets_dict[args.dataset]
 
-    data_path = opts['data_path']
-    filenames = readlines(join('splits', opts['split'], 'val_files.txt'))
+    data_path = join(data_path_root, args.data_path)
+    filenames = readlines(join('splits', args.split, 'val_files.txt'))
     num_scales = len(opts['scales'])
     dataset = dataset(data_path, filenames, opts['height'], opts['width'], [0], num_scales, is_train=False, img_ext='.png')
     dataloader = DataLoader(dataset, 1, shuffle=False, num_workers=1, pin_memory=True, drop_last=False)
@@ -86,10 +86,12 @@ def load_data(args, opts):
 def make_eval_dirs(dest_path, args):
     if not os.path.isdir(dest_path):
         os.makedirs(dest_path)
-        if args.write_depths:
+    if args.write_depths:
+        if not os.path.isdir(join(dest_path, 'dense_depth')):
             os.makedirs(join(dest_path, 'dense_depth'))
             os.makedirs(join(dest_path, 'registered_depth'))
-        if args.visualize:
+    if args.visualize:
+        if not os.path.isdir(join(dest_path, 'viz')):
             os.makedirs(join(dest_path, 'viz'))
 
 
@@ -97,7 +99,9 @@ if __name__ == '__main__':
     # Parse arguments
     parser = argparse.ArgumentParser(description=None)
     parser.add_argument('-m', '--model', default='kitti_test_run')
-    parser.add_argument('--dataset', default='kitti_data')
+    parser.add_argument('--dataset', default='kitti')
+    parser.add_argument('--data_path', default='kitti_data')
+    parser.add_argument('--split', default='eigen_zhou')
     parser.add_argument('--write_depths', action='store_true')
     parser.add_argument('--visualize', action='store_true')
 
@@ -109,7 +113,7 @@ if __name__ == '__main__':
     print("Loading data")
     dataloader = load_data(args, opts)
     print('Loaded {} validation images from SPLIT: {}  DATASET: {}'.format
-          (len(dataloader), opts['split'], args.dataset))
+          (len(dataloader), args.split, args.dataset))
 
     # Create dirs for model outputs
     dest_path = join(abspath('./outputs'), args.model)
@@ -145,18 +149,15 @@ if __name__ == '__main__':
 
             gt_h, gt_w = gt_depth.shape
 
-    # for fid in range(len(pred_disps)):
-        # Get GT depth and predicted disparity
-        # color = colors[fid]
-        # pred_disp = pred_disps[fid]
-        # gt_depth = gt_depths[fid]
 
             # Get errors
             pred_disp = cv2.resize(pred_disp, (gt_w, gt_h))
             _, pred_depth = disp_to_depth(pred_disp, mind, maxd)
     
-            mask = gt_depth > 0
-            not_mask = gt_depth == 0
+            # mask = gt_depth > 0 and gt_depth <= 80
+            # not_mask = gt_depth == 0 and gt_depth > 80
+            mask = np.all([gt_depth > 0, gt_depth <= 80], axis=0)
+            not_mask = np.any([gt_depth == 0, gt_depth > 80], axis=0)
     
             # Skip image if depth map has no registered pixels
             if np.sum(mask) == 0:
@@ -226,7 +227,7 @@ if __name__ == '__main__':
                 img = img.resize((gt_w, gt_h))
                 img.save('outputs/{}/viz/{:05}_color.jpg'.format(args.model, fid))
     
-            print("Processed {}".format(fid))
+            print("Processed {}".format(fid), end="\r")
             fid += 1
 
     # Average all errors
