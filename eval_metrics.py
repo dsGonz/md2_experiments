@@ -165,10 +165,10 @@ if __name__ == '__main__':
             pred_disp = cv2.resize(pred_disp, (gt_w, gt_h))
             _, pred_depth = disp_to_depth(pred_disp, mind, maxd)
     
-            # mask = gt_depth > 0 and gt_depth <= 80
-            # not_mask = gt_depth == 0 and gt_depth > 80
-            mask = np.all([gt_depth > 0, gt_depth <= 80], axis=0)
-            not_mask = np.any([gt_depth == 0, gt_depth > 80], axis=0)
+            mask = gt_depth > 0 
+            not_mask = gt_depth == 0 
+            # mask = np.all([gt_depth > 0, gt_depth <= 80], axis=0)
+            # not_mask = np.any([gt_depth == 0, gt_depth > 80], axis=0)
     
             # Skip image if depth map has no registered pixels
             if np.sum(mask) == 0:
