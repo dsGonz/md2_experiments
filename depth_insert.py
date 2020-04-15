@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 import torch
 import shutil
 import json
@@ -11,8 +12,8 @@ from get_depth import loadModel, pilToTensor, normalize_disp, tensorToPil
 from layers import disp_to_depth
 
 # COLORS
-RED = (255, 0, 0)
-GREEN = (0, 255, 0)
+RED = (255, 0, 0, 255)
+GREEN = (0, 255, 0, 255)
 
 # CONSTANTS
 mask_path = "depth_samples/insert/masks"
@@ -71,14 +72,14 @@ if __name__ == "__main__":
     parser.add_argument('-d', '--dest', default="depth_samples/insert")
     parser.add_argument('-n', '--name', default="shapes")
     parser.add_argument('--mask', default=None)
-    parser.add_argument('--num_sizes', default=10)
-    parser.add_argument('--min_L', default=16)
-    parser.add_argument('--max_L', default=128)
-    parser.add_argument('--offset', default=60)
-    parser.add_argument('--num_x', default=15)
+    parser.add_argument('--num_sizes', type=int, default=10)
+    parser.add_argument('--min_L', type=int, default=16)
+    parser.add_argument('--max_L', type=int, default=128)
+    parser.add_argument('--offset', type=int, default=60)
+    parser.add_argument('--num_x', type=int, default=15)
     parser.add_argument('--num_y', default=3)
     parser.add_argument('--ss_ratio', default=29.288708)
-    parser.add_argument('--source_path', default=os.path.expanduser("~/monodepth2/depth_samples/inputs"))
+    parser.add_argument('--source_path', default=os.path.expanduser("./depth_samples/inputs"))
     parser.add_argument('--multi_size', dest='multi_size', action='store_true')
 
     args = parser.parse_args()
@@ -132,10 +133,14 @@ if __name__ == "__main__":
                     mask = Image.open(join(mask_path, args.mask))
                     mask = mask.resize((L, L))
                     img.paste(mask, bbox, mask)
-                    bmask = get_binary_mask(mask, img, bbox, in_w, in_h)
                 else:
-                    draw = ImageDraw.Draw(img)
-                    draw.ellipse(bbox, fill=COLOR)
+                    mask = Image.new('RGBA', (L, L), getcolor('rgba(0,0,0,0)', 'RGBA'))
+                    draw = ImageDraw.Draw(mask)
+                    draw.ellipse((0,0,L,L), fill=COLOR)
+                    img.paste(mask, bbox, mask)
+
+                # Get binary mask of object for depth calculations
+                bmask = get_binary_mask(mask, img, bbox, in_w, in_h)
 
                 # Save the color image
                 img.save(join(color_path, 'color_{}_{}_{}.png'.format(r, c, i)))

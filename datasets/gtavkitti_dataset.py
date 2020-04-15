@@ -16,22 +16,23 @@ from kitti_utils import generate_depth_map
 from .mono_dataset import MonoDataset
 
 
-class GTAVDataset(MonoDataset):
-    """Superclass for different types of GTAV dataset loaders
+class GTAVKITTIDataset(MonoDataset):
+    """Superclass for different types of GTAVKITTI dataset loaders
     """
     def __init__(self, *args, **kwargs):
-        super(GTAVDataset, self).__init__(*args, **kwargs)
+        super(GTAVKITTIDataset, self).__init__(*args, **kwargs)
 
-        self.K = np.array([[640, 0, 622, 0],
-                           [0, 640, 187.5, 0],
+        self.K = np.array([[0.58, 0, 0.5, 0],
+                           [0, 1.92, 0.5, 0],
                            [0, 0, 1, 0],
                            [0, 0, 0, 1]], dtype=np.float32)
 
         self.full_res_shape = (1242, 375)
         img_w, img_h = self.full_res_shape
 
-        self.K[0,:] /= img_w
-        self.K[1,:] /= img_h
+        self.side_map = {"2": 2, "3": 3, "l": 2, "r": 3}
+        # self.K[0,:] /= img_w
+        # self.K[1,:] /= img_h
 
     def check_depth(self):
         line = self.filenames[0].split()
@@ -45,7 +46,7 @@ class GTAVDataset(MonoDataset):
                 'depth',
                 '{:06d}.npy'.format(frame_index))
 
-        # return False
+        return False
         return os.path.isfile(depth_filename)
 
     def get_color(self, folder, frame_index, side, do_flip):
@@ -57,19 +58,23 @@ class GTAVDataset(MonoDataset):
         return color
 
 
-class GTAVRAWDataset(GTAVDataset):
-    """GTAV dataset which loads the original velodyne depth maps for ground truth
+class GTAVKITTIRAWDataset(GTAVKITTIDataset):
+    """GTAVKITTI dataset which loads the original velodyne depth maps for ground truth
     """
     def __init__(self, *args, **kwargs):
-        super(GTAVRAWDataset, self).__init__(*args, **kwargs)
+        super(GTAVKITTIRAWDataset, self).__init__(*args, **kwargs)
 
     def get_image_path(self, folder, frame_index, side):
-        f_str = "{:06d}{}".format(frame_index, self.img_ext)
+        if folder.startswith('gtav_data'):
+            f_str = "{:06d}{}".format(frame_index, self.img_ext)
+            folder = os.path.join(folder, "image_2")
+        else:
+            f_str = "{:010d}{}".format(frame_index, self.img_ext)
+            folder = os.path.join(folder, "image_0{}/data".format(self.side_map[side]))
+
         image_path = os.path.join(
                 self.data_path,
-                'crop',
                 folder,
-                'image_2',
                 f_str)
         return image_path
 
@@ -130,11 +135,11 @@ class GTAVRAWDataset(GTAVDataset):
 
 
 # This aint right. Uses dense GT depths in the form of .PNG instead of .BIN
-class GTAVDepthDataset(GTAVDataset):
-    """GTAV dataset which uses the updated ground truth depth maps
+class GTAVKITTIDepthDataset(GTAVKITTIDataset):
+    """GTAVKITTI dataset which uses the updated ground truth depth maps
     """
     def __init__(self, *args, **kwargs):
-        super(GTAVDepthDataset, self).__init__(*args, **kwargs)
+        super(GTAVKITTIDepthDataset, self).__init__(*args, **kwargs)
 
     def get_image_path(self, folder, frame_index, side):
         f_str = "{:06d}{}".format(frame_index, self.img_ext)

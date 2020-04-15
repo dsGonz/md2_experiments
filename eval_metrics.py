@@ -6,6 +6,7 @@ import cv2
 import torch
 import argparse
 import os
+import sys
 import time
 import datasets
 import numpy as np
@@ -94,11 +95,17 @@ def make_eval_dirs(dest_path, args):
         if not os.path.isdir(join(dest_path, 'viz')):
             os.makedirs(join(dest_path, 'viz'))
 
+def print_log(f, statement):
+    f.write(statement + '\n')
+    print(statement)
+
+    return
 
 if __name__ == '__main__':
     # Parse arguments
     parser = argparse.ArgumentParser(description=None)
     parser.add_argument('-m', '--model', default='kitti_test_run')
+    parser.add_argument('-n', '--name', default='temp')
     parser.add_argument('--dataset', default='kitti')
     parser.add_argument('--data_path', default='kitti_data')
     parser.add_argument('--split', default='eigen_zhou')
@@ -106,22 +113,26 @@ if __name__ == '__main__':
     parser.add_argument('--visualize', action='store_true')
 
     args = parser.parse_args()
+    
+    # Create dirs for model outputs
+    dest_path = join(abspath('./outputs'), args.name)
+    make_eval_dirs(dest_path, args)
+
+    # Print and write all outputs to log file
+    f = open(join(dest_path, 'metrics.log'), 'w')
 
     encoder, depth_decoder, opts = loadModel(args.model)
-    print("Loaded MODEL: {}".format(opts["model_name"]))
+    print_log(f, "Loaded MODEL: {}".format(opts["model_name"]))
 
-    print("Loading data")
+    print_log(f, "Loading data")
     dataloader = load_data(args, opts)
-    print('Loaded {} validation images from SPLIT: {}  DATASET: {}'.format
+    print_log(f, 'Loaded {} validation images from SPLIT: {}  DATASET: {}'.format
           (len(dataloader), args.split, args.dataset))
 
-    # Create dirs for model outputs
-    dest_path = join(abspath('./outputs'), args.model)
-    make_eval_dirs(dest_path, args)
 
     # Get predictions. Time the duration
     start = time.time()
-    print('Evaluating...')
+    print_log(f, 'Evaluating...')
 
     # gt_depths = []
     # pred_disps = []
@@ -184,9 +195,9 @@ if __name__ == '__main__':
             if args.write_depths:
                 dmap_pred = 1 / pred_disp
                 dmap_pred *= ratio
-                np.save('outputs/{}/dense_depth/{:05}_pred.npy'.format(args.model, fid), dmap_pred)
+                np.save('outputs/{}/dense_depth/{:05}_pred.npy'.format(args.name, fid), dmap_pred)
                 dmap_pred[not_mask] = 0
-                np.save('outputs/{}/registered_depth/{:05}_pred_reg.npy'.format(args.model, fid), dmap_pred)
+                np.save('outputs/{}/registered_depth/{:05}_pred_reg.npy'.format(args.name, fid), dmap_pred)
     
             if args.visualize:
                 # Get Registered depth maps
@@ -215,17 +226,17 @@ if __name__ == '__main__':
     
                     # Save each visual
                     img = pil.fromarray(viz_dimage).convert('RGB')
-                    img.save('outputs/{}/viz/{:05}_dmap_{}.jpg'.format(args.model, fid, i))
+                    img.save('outputs/{}/viz/{:05}_dmap_{}.jpg'.format(args.name, fid, i))
     
                 # Save disparity map
                 img = pil.fromarray(colormap(pred_disp)).convert('RGB')
-                img.save('outputs/{}/viz/{:05}_disp.jpg'.format(args.model, fid))
+                img.save('outputs/{}/viz/{:05}_disp.jpg'.format(args.name, fid))
     
                 # Save color image
                 color = np.moveaxis(color, 0, -1)
                 img = pil.fromarray(np.uint8(color*255))
                 img = img.resize((gt_w, gt_h))
-                img.save('outputs/{}/viz/{:05}_color.jpg'.format(args.model, fid))
+                img.save('outputs/{}/viz/{:05}_color.jpg'.format(args.name, fid))
     
             print("Processed {}".format(fid), end="\r")
             fid += 1
@@ -240,15 +251,15 @@ if __name__ == '__main__':
     np.save(error_path, error_table)
     np.save(mean_error_path, mean_errors)
 
-    print('\nEvaluation Metrics')
-    print("  " + ("{:>8} | " * 7).format("abs_rel", "sq_rel", "rmse", "rmse_log", "a1", "a2", "a3"))
-    print(("&{: 8.3f}  " * 7).format(*mean_errors.tolist()) + "\\\\")
+    print_log(f, '\nEvaluation Metrics')
+    print_log(f, "  " + ("{:>8} | " * 7).format("abs_rel", "sq_rel", "rmse", "rmse_log", "a1", "a2", "a3"))
+    print_log(f, ("&{: 8.3f}  " * 7).format(*mean_errors.tolist()) + "\\\\")
 
     # Get stats on the median scales
-    print('\nMedian Scale Metrics')
-    print("  " + ("{:>8} | " * 5).format("min", "max", "mean", "std", "median"))
-    print(("&{: 8.3f}  " * 5).format(np.min(ratios), np.max(ratios), np.mean(ratios), np.std(ratios), np.median(ratios)) + "\\\\")
+    print_log(f, '\nMedian Scale Metrics')
+    print_log(f, "  " + ("{:>8} | " * 5).format("min", "max", "mean", "std", "median"))
+    print_log(f, ("&{: 8.3f}  " * 5).format(np.min(ratios), np.max(ratios), np.mean(ratios), np.std(ratios), np.median(ratios)) + "\\\\")
 
     # Get duration
     dur = round(time.time() - start, 4)
-    print("\n-> Done! Time: {} sec".format(dur))
+    print_log(f, "\n-> Done! Time: {} sec".format(dur))
