@@ -45,7 +45,6 @@ class GTAVDataset(MonoDataset):
                 'depth',
                 '{:06d}.npy'.format(frame_index))
 
-        # return False
         return os.path.isfile(depth_filename)
 
     def get_color(self, folder, frame_index, side, do_flip):
@@ -83,6 +82,7 @@ class GTAVRAWDataset(GTAVDataset):
               f_str)
 
         depth_gt = np.load(depth_filename)
+        depth_gt[depth_gt > 80] = 0 # Max valid depth of LiDAR is 80
 
         if do_flip:
             depth_gt = np.fliplr(depth_gt)

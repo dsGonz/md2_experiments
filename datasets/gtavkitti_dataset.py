@@ -39,14 +39,19 @@ class GTAVKITTIDataset(MonoDataset):
         scene_name = line[0]
         frame_index = int(line[1])
 
-        depth_filename = os.path.join(
+        if scene_name.startswith('gtav_data'):
+            depth_filename = os.path.join(
+                    self.data_path,
+                    scene_name,
+                    'depth',
+                    '{:06d}.npy'.format(frame_index))
+        else:
+            depth_filename = os.path.join(
                 self.data_path,
-                'crop',
                 scene_name,
-                'depth',
-                '{:06d}.npy'.format(frame_index))
+                "velodyne_points/data/{:010d}.bin".format(int(frame_index)))
 
-        return False
+
         return os.path.isfile(depth_filename)
 
     def get_color(self, folder, frame_index, side, do_flip):
@@ -79,15 +84,27 @@ class GTAVKITTIRAWDataset(GTAVKITTIDataset):
         return image_path
 
     def get_depth(self, folder, frame_index, side, do_flip):
-        f_str = "{:06d}.npy".format(frame_index)
-        depth_filename = os.path.join(
-              self.data_path,
-              'crop',
-              folder,
-              'depth',
-              f_str)
+        if folder.startswith('gtav_data'):
+            f_str = "{:06d}.npy".format(frame_index)
+            depth_filename = os.path.join(
+                self.data_path,
+                folder,
+                'depth',
+                f_str)
 
-        depth_gt = np.load(depth_filename)
+            depth_gt = np.load(depth_filename)
+            depth_gt[depth_gt > 80] = 0 # Max valid depth of LiDAR is 80
+        else:
+            calib_path = os.path.join(self.data_path, folder.split("/")[0], folder.split("/")[1])
+
+            velo_filename = os.path.join(
+                self.data_path,
+                folder,
+                "velodyne_points/data/{:010d}.bin".format(int(frame_index)))
+
+            depth_gt = generate_depth_map(calib_path, velo_filename, self.side_map[side])
+            depth_gt = skimage.transform.resize(
+                depth_gt, self.full_res_shape[::-1], order=0, preserve_range=True, mode='constant')
 
         if do_flip:
             depth_gt = np.fliplr(depth_gt)

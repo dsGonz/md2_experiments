@@ -21,7 +21,6 @@ from evaluate_depth import compute_errors
 from utils import readlines
 
 # CONSTANTS
-epoch_num = 19
 data_path_root= '/mnt/data0-nfs/shared-datasets/'
 
 
@@ -35,7 +34,7 @@ def colormap(tensor):
     return image
 
 
-def loadModel(model_name):
+def loadModel(model_name, epoch_num):
     # Set up network and load weights
     model_path = join(abspath('./logs'), model_name)
     opts_path = join(model_path, 'models/opt.json')
@@ -109,6 +108,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', default='kitti')
     parser.add_argument('--data_path', default='kitti_data')
     parser.add_argument('--split', default='eigen_zhou')
+    parser.add_argument('--weights', default='19')
     parser.add_argument('--write_depths', action='store_true')
     parser.add_argument('--visualize', action='store_true')
 
@@ -121,7 +121,7 @@ if __name__ == '__main__':
     # Print and write all outputs to log file
     f = open(join(dest_path, 'metrics.log'), 'w')
 
-    encoder, depth_decoder, opts = loadModel(args.model)
+    encoder, depth_decoder, opts = loadModel(args.model, args.weights)
     print_log(f, "Loaded MODEL: {}".format(opts["model_name"]))
 
     print_log(f, "Loading data")
@@ -165,10 +165,10 @@ if __name__ == '__main__':
             pred_disp = cv2.resize(pred_disp, (gt_w, gt_h))
             _, pred_depth = disp_to_depth(pred_disp, mind, maxd)
     
-            mask = gt_depth > 0 
-            not_mask = gt_depth == 0 
-            # mask = np.all([gt_depth > 0, gt_depth <= 80], axis=0)
-            # not_mask = np.any([gt_depth == 0, gt_depth > 80], axis=0)
+            # mask = gt_depth > 0 
+            # not_mask = gt_depth == 0 
+            mask = np.all([gt_depth > 0, gt_depth <= 80], axis=0)
+            not_mask = np.any([gt_depth == 0, gt_depth > 80], axis=0)
     
             # Skip image if depth map has no registered pixels
             if np.sum(mask) == 0:
