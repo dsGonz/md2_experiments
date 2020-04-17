@@ -75,7 +75,15 @@ def load_data(args, opts):
     dataset = datasets_dict[args.dataset]
 
     data_path = join(data_path_root, args.data_path)
-    filenames = readlines(join('splits', args.split, 'val_files.txt'))
+
+    # Check if the split is for validation set or test set
+    split_path= join('splits', args.split)
+    if  os.path.exists(join(split_path, 'val_files.txt')):
+        split_file = join(split_path, 'val_files.txt')
+    else:
+        split_file = join(split_path, 'test_files.txt')
+
+    filenames = readlines(split_file)
     num_scales = len(opts['scales'])
     dataset = dataset(data_path, filenames, opts['height'], opts['width'], [0], num_scales, is_train=False, img_ext='.png')
     dataloader = DataLoader(dataset, 1, shuffle=False, num_workers=1, pin_memory=True, drop_last=False)
