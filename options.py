@@ -34,7 +34,7 @@ class MonodepthOptions:
         self.parser.add_argument("--split",
                                  type=str,
                                  help="which training split to use",
-                                 choices=["eigen_zhou", "eigen_full", "odom", "benchmark", "office", "office_trim", "vpl", "vpl_static", "turtle_office", "office_all", "to_clean", "oa_clean", "presil", "presil_dynamic", "presil_stable", "gtav_openroad", "gtav_openroad_10hz", "gtavkitti", "gtavkitti50"],
+                                 choices=["eigen_zhou", "eigen_full", "odom", "benchmark", "office", "office_trim", "vpl", "vpl_static", "turtle_office", "office_all", "to_clean", "oa_clean", "presil", "presil_dynamic", "presil_stable", "gtav_openroad", "gtav_openroad_10hz", "gtavkitti", "gtavkitti50", "ez_50", "gtav_openroad_static"],
                                  default="eigen_zhou")
         self.parser.add_argument("--num_layers",
                                  type=int,
